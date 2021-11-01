@@ -28,7 +28,9 @@ function random() private view returns(uint) {
 function pickWinner() public managerUser {
   if (players.length > 0) {
     uint index = random() % players.length;
+
     address payable winner = payable(players[index]);
+    
     winner.transfer(address(this).balance);
     players = new address[](0);
   }
