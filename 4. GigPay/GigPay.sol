@@ -30,7 +30,7 @@ contract GigPay {
       _;
   }
 
-  function createProject(uint256 value, address creatorAddress) public onlyCreator {
+  function createProject(uint256 value) public view onlyCreator {
       Project memory p;
       p._value = value;
       p._creator = msg.sender;
@@ -39,17 +39,19 @@ contract GigPay {
 
   function pickCooperator(address payable cooperatorAddress) public onlyCreator{
     Project memory p;
+    assert(p._cooperator);
+    require(cooperatorAddress != creator, 'You cannot set yourself as cooperator.');
     p._cooperator = cooperatorAddress;
     cooperator = p._cooperator;
   }
 
   function acceptProject()
       public
+      view
       onlyCooperator
   {
     Project memory p;
       require(p._cooperator == cooperator);
-      require(cooperator == msg.sender);
       p.projectState = ProjectState.accepted;
   }
 
@@ -67,7 +69,7 @@ contract GigPay {
   }
 
 
-  function approveProject() public onlyCreator {
+  function approveProject() public view onlyCreator {
     Project memory p;
     require(msg.sender == creator);
     require(!p._approval);
@@ -75,7 +77,7 @@ contract GigPay {
   }
 
   function releaseFunds()
-    public
+    private
     payable
     onlyCreator
 {
@@ -84,9 +86,10 @@ contract GigPay {
     p._cooperator.transfer(p._value);
 }
 
-  function finalizeProject() public onlyCreator {
+  function finalizeProject() public view onlyCreator {
     Project memory p;
     require(p._approval == true);
+    releaseFunds();
     p.projectState = ProjectState.finalized;
   }
 
