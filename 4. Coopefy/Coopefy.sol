@@ -4,6 +4,9 @@ pragma solidity >=0.7.0 <0.9.0;
 contract Coopefy {
 
   address public manager;
+  address payable public cooperator;
+
+  enum ProjectState {created, accepted, finalized}
 
   constructor(address creator) {
     manager = creator;
@@ -14,10 +17,16 @@ contract Coopefy {
     address _creator;
     address _cooperator;
     bool approval;
+    ProjectState projectState;
   }
 
   modifier onlyCreator() {
       require(msg.sender == manager);
+      _;
+  }
+
+  modifier onlyCooperator() {
+      require(msg.sender == cooperator);
       _;
   }
 
