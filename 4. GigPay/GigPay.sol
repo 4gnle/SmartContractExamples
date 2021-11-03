@@ -4,10 +4,11 @@ pragma solidity >=0.7.0 <0.9.0;
 contract GigPay {
 
   address public creator;
+  address private owner;
   address payable public cooperator;
 
   constructor() {
-    creator = msg.sender;
+    owner = msg.sender;
   }
 
   enum ProjectState {created, funded, accepted, finalized}
@@ -20,6 +21,8 @@ contract GigPay {
     ProjectState projectState;
   }
 
+  Project[1] public activeProject;
+
   modifier onlyCreator() {
       require(msg.sender == creator);
       _;
@@ -30,19 +33,27 @@ contract GigPay {
       _;
   }
 
+    modifier onlyOwner() {
+      require(msg.sender == owner);
+      _;
+  }
+
   function createProject(uint256 value) public view onlyCreator {
-      Project memory p;
-      p._value = value;
-      p._creator = msg.sender;
-      p.projectState = ProjectState.created;
+
+    activeProject.push(Project({
+        ._value = value;
+        _creator = msg.sender;
+        projectState = ProjectState.created;
+    }));
   }
 
   function pickCooperator(address payable cooperatorAddress) public onlyCreator{
-    Project memory p;
-    assert(p._cooperator);
+    Project storage project = Project()
+
+    require(Project._cooperator == address(0));
     require(cooperatorAddress != creator, 'You cannot set yourself as cooperator.');
-    p._cooperator = cooperatorAddress;
-    cooperator = p._cooperator;
+    Project._cooperator = cooperatorAddress;
+    cooperator = Project._cooperator;
   }
 
   function acceptProject()
@@ -50,9 +61,8 @@ contract GigPay {
       view
       onlyCooperator
   {
-    Project memory p;
-      require(p._cooperator == cooperator);
-      p.projectState = ProjectState.accepted;
+      require(Project._cooperator == cooperator);
+      Project.projectState = ProjectState.accepted;
   }
 
   function fundProject()
@@ -60,12 +70,11 @@ contract GigPay {
     payable
     onlyCreator
   {
-  Project memory p;
-    require(p.projectState == ProjectState.accepted);
-    require(p._value != 0);
-    require(msg.value == p._value, 'You need to fund with ');
+    require(Project.projectState == ProjectState.accepted);
+    require(Project._value != 0);
+    require(msg.value == Project._value, 'You need to fund with ');
 
-    p.projectState = ProjectState.funded;
+    Project.projectState = ProjectState.funded;
   }
 
 
@@ -76,21 +85,32 @@ contract GigPay {
     p._approval = true;
   }
 
-  function releaseFunds()
-    private
+  function releaseFunds(address payable _cooperatorAddress)
+    public
     payable
     onlyCreator
-{
-  Project memory p;
-    require(p.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to release.');
-    p._cooperator.transfer(p._value);
-}
+    {
+        require(Project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to release.');
+        require(Project._value <= address(this).balance, 'Trying to release more money than the contract has.');
+        require(_cooperatorAddress == Project._cooperator);
+        _cooperatorAddress.transfer(Project._value);
+    }
+
+   function revertFunds(address payable _creatorAddress)
+     public
+     payable
+     onlyOwner
+    {
+        require(Project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to send back.');
+        require(Project._value <= address(this).balance, 'Trying to release more money than the contract has.');
+        require(_creatorAddress == Project._creator);
+        _creatorAddress.transfer(Project._value);
+    }
+
 
   function finalizeProject() public view onlyCreator {
-    Project memory p;
-    require(p._approval == true);
-    releaseFunds();
-    p.projectState = ProjectState.finalized;
+    require(Project._approval == true);
+    Project.projectState = ProjectState.finalized;
   }
 
 }
