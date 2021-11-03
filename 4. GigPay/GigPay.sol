@@ -17,6 +17,7 @@ contract GigPay {
     uint256 _value;
     address _creator;
     address payable _cooperator;
+    bool _hascooperator;
     bool _approval;
     ProjectState projectState;
   }
@@ -39,7 +40,6 @@ contract GigPay {
   }
 
   function createProject(uint256 value) public view onlyCreator {
-
     activeProject.push(Project({
         ._value = value;
         _creator = msg.sender;
@@ -48,12 +48,13 @@ contract GigPay {
   }
 
   function pickCooperator(address payable cooperatorAddress) public onlyCreator{
-    Project storage project = Project()
+    Project storage project = activeProject;
 
-    require(Project._cooperator == address(0));
+    require(!project._hascooperator, 'There is a cooperator already.');
     require(cooperatorAddress != creator, 'You cannot set yourself as cooperator.');
-    Project._cooperator = cooperatorAddress;
-    cooperator = Project._cooperator;
+    project._cooperator = cooperatorAddress;
+    cooperator = project._cooperator;
+    project._hascooperator = true;
   }
 
   function acceptProject()
@@ -61,8 +62,10 @@ contract GigPay {
       view
       onlyCooperator
   {
-      require(Project._cooperator == cooperator);
-      Project.projectState = ProjectState.accepted;
+    Project storage project = activeProject;
+
+      require(project._cooperator == cooperator);
+      project.projectState = ProjectState.accepted;
   }
 
   function fundProject()
@@ -70,18 +73,21 @@ contract GigPay {
     payable
     onlyCreator
   {
-    require(Project.projectState == ProjectState.accepted);
-    require(Project._value != 0);
-    require(msg.value == Project._value, 'You need to fund with ');
+    Project storage project = activeProject;
 
-    Project.projectState = ProjectState.funded;
+    require(project.projectState == ProjectState.accepted);
+    require(project._value != 0);
+    require(msg.value == project._value, 'You need to fund with ');
+
+    project.projectState = ProjectState.funded;
   }
 
 
   function approveProject() public view onlyCreator {
-    Project memory p;
+    Project storage project = activeProject;
+
     require(msg.sender == creator);
-    require(!p._approval);
+    require(!project._approval);
     p._approval = true;
   }
 
@@ -90,10 +96,13 @@ contract GigPay {
     payable
     onlyCreator
     {
-        require(Project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to release.');
-        require(Project._value <= address(this).balance, 'Trying to release more money than the contract has.');
-        require(_cooperatorAddress == Project._cooperator);
-        _cooperatorAddress.transfer(Project._value);
+
+      Project storage project = activeProject;
+
+        require(project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to release.');
+        require(project._value <= address(this).balance, 'Trying to release more money than the contract has.');
+        require(_cooperatorAddress == project._cooperator);
+        _cooperatorAddress.transfer(project._value);
     }
 
    function revertFunds(address payable _creatorAddress)
@@ -101,16 +110,20 @@ contract GigPay {
      payable
      onlyOwner
     {
-        require(Project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to send back.');
-        require(Project._value <= address(this).balance, 'Trying to release more money than the contract has.');
-        require(_creatorAddress == Project._creator);
-        _creatorAddress.transfer(Project._value);
+      Project storage project = activeProject;
+
+        require(project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to send back.');
+        require(project._value <= address(this).balance, 'Trying to release more money than the contract has.');
+        require(_creatorAddress == project._creator);
+        _creatorAddress.transfer(project._value);
     }
 
 
   function finalizeProject() public view onlyCreator {
-    require(Project._approval == true);
-    Project.projectState = ProjectState.finalized;
+    Project storage project = activeProject;
+
+    require(project._approval == true);
+    project.projectState = ProjectState.finalized;
   }
 
 }
