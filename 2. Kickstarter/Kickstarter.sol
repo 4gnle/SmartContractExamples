@@ -1,146 +1,98 @@
 //SPDX-License-Identifier: UNLICENSED
+
 pragma solidity >=0.7.0 <0.9.0;
 
-contract GigPay {
+contract Kickstarter {
+  Campaigns[] public deployedCampaigns;
 
-  address public owner;
-
-  constructor() {
-    owner = msg.sender;
+  function createCampaign(uint256 minimum) public {
+    Campaigns newCampaign = new Campaigns(minimum, msg.sender);
+    deployedCampaigns.push(newCampaign);
   }
 
-  enum ProjectState {created, funded, accepted, finalized}
-
-  struct Project {
-    uint256 _value;
-    address _creator;
-    bool _hascreator;
-    address payable _cooperator;
-    bool _hascooperator;
-    bool _approval;
-    ProjectState projectState;
+  function getDeployedCampaigns() public view returns(Campaigns[] memory){
+    return deployedCampaigns;
   }
+}
 
-  Project[1] public activeProject;
-
-  modifier onlyCreator() {
-      Project storage project = activeProject[0];
-
-
-      require(msg.sender == project._creator);
-      _;
-  }
-
-  modifier onlyCooperator() {
-    Project storage project = activeProject[0];
-      require(msg.sender == project._cooperator);
-      _;
-  }
-
-    modifier onlyOwner() {
-      require(msg.sender == owner);
-      _;
-  }
-
-  function setCreator() public {
-    Project storage project = activeProject[0];
-    require(!project._hascreator);
-    project._creator = msg.sender;
-    project._hascreator = true;
-  }
-
-function returnCreator() public view returns (address){
-    Project storage project = activeProject[0];
-    return project._creator;
-  }
-
-  function createProject(uint256 value) public onlyCreator {
-    Project storage project = activeProject[0];
-
-    project._value = value;
-    project._creator = msg.sender;
-    project.projectState = ProjectState.created;
-  }
-
-  function pickCooperator(address payable cooperatorAddress) public onlyCreator{
-    Project storage project = activeProject[0];
-
-    require(!project._hascooperator, 'There is a cooperator already.');
-    require(cooperatorAddress != project._creator, 'You cannot set yourself as cooperator.');
-    project._cooperator = cooperatorAddress;
-    project._hascooperator = true;
-  }
-
-  function acceptProject()
-      public
-      onlyCooperator
-  {
-    Project storage project = activeProject[0];
-    project.projectState = ProjectState.accepted;
-  }
-
-    function declineProject() public onlyCooperator {
-    Project storage project = activeProject[0];
-
-    require(project._hascooperator, 'There is no cooperator for this project');
-    delete(project._cooperator);
-    project._hascooperator = false;
-  }
-
-  function fundProject()
-    public
-    payable
-    onlyCreator
-  {
-    Project storage project = activeProject[0];
-
-    require(project.projectState == ProjectState.accepted);
-    require(project._value != 0);
-    require(msg.value == project._value, 'You need to fund with ');
-
-    project.projectState = ProjectState.funded;
-  }
-
-
-  function approveProject() public onlyCreator {
-    Project storage project = activeProject[0];
-    require(!project._approval);
-    project._approval = true;
-  }
-
-  function releaseFunds(address payable _cooperatorAddress)
-    public
-    payable
-    onlyCreator
-    {
-
-      Project storage project = activeProject[0];
-
-        require(project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to release.');
-        require(project._value <= address(this).balance, 'Trying to release more money than the contract has.');
-        require(_cooperatorAddress == project._cooperator);
-        _cooperatorAddress.transfer(project._value);
+contract Campaigns {
+    struct Request {
+      string description;
+      uint value;
+      address payable recipient;
+      bool complete;
+      uint approvalCount;
+      mapping(address => bool) approvals;
     }
 
-   function revertFunds(address payable _creatorAddress)
-     public
-     payable
-     onlyOwner
-    {
-      Project storage project = activeProject[0];
+    address public manager;
+    uint256 public minimumContribution;
+    mapping(address => bool) public approvers;
+    mapping(uint256 => Request) public requests;
+    uint256 numRequests;
+    uint256 approversCount;
 
-        require(project.projectState == ProjectState.funded, 'You have not funded this project yet. There are no funds to send back.');
-        require(project._value <= address(this).balance, 'Trying to release more money than the contract has.');
-        require(_creatorAddress == project._creator);
-        _creatorAddress.transfer(project._value);
-    }
+constructor(uint256 minimum, address creator) {
+    manager = creator;
+    minimumContribution = minimum;
+}
 
+modifier managerUser() {
+    require(msg.sender == manager);
+    _;
+}
 
-  function finalizeProject() public onlyCreator {
-    Project storage project = activeProject[0];
+function setMinimum(uint minimum) public {
+    minimumContribution = minimum;
+}
 
-    require(project._approval == true);
-    project.projectState = ProjectState.finalized;
-  }
+function contribute() public payable {
+    require(msg.value >= minimumContribution, 'You need to contribute the minimum');
+    approvers[msg.sender] = true;
+    approversCount++;
+}
 
+function createRequest(string memory description, uint256 value, address payable recipient
+) public managerUser {
+    Request storage r = requests[numRequests++];
+    r.description = description;
+    r.value = value;
+    r.recipient = recipient;
+    r.complete = false;
+    r.approvalCount = 0;
+}
+
+function approveRequest(uint256 index) public {
+  Request storage request = requests[index];
+
+  require(approvers[msg.sender]);
+  require(!request.approvals[msg.sender]);
+
+  request.approvals[msg.sender] = true;
+  request.approvalCount++;
+}
+
+function finalizeRequest(uint index) public managerUser {
+  Request storage request = requests[index];
+
+  require(request.approvalCount >= (approversCount / 2));
+  require(!request.complete);
+
+  request.complete = true;
+  request.recipient.transfer(request.value);
+}
+
+function summary() public view returns(uint, uint, uint, uint, address) {
+  return (
+    address(this).balance,
+    minimumContribution,
+    numRequests,
+    approversCount,
+    manager
+  );
+}
+
+function requestsLength() public view returns(uint) {
+  return numRequests;
+}
 }
